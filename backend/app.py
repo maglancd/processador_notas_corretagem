@@ -34,9 +34,13 @@ def processar_nota_corretagem(pdf_path):
 
     # Procurar pelo cabeçalho "Nr. nota Folha Data pregão" e capturar a linha seguinte  
     cabecalho_match = re.search(r"Nr\. nota Folha Data pregão\n(\d+)\s+\d+\s+(\d{2}/\d{2}/\d{4})", texto)  
+    if not cabecalho_match:
+       cabecalho_match = re.search(r"Nr\. nota  Folha  Data pregão\n(\d+)\s+\d+\s+(\d{2}/\d{2}/\d{4})", texto)  
+
     if cabecalho_match:  
         numero_nota = cabecalho_match.group(1)  # Capturar o número da nota  
         data_pregao = cabecalho_match.group(2)  # Capturar a data do pregão
+    
     print("cabecalho_match")
     print(cabecalho_match)
     print(numero_nota)
