@@ -1,12 +1,10 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pdfplumber
 import io
 import os
 import tempfile
-import re  # Adicionando importação do re
-import pyperclip
+import re
 
 app = Flask(__name__)
 
