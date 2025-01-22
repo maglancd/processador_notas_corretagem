@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Processador de Notas de Corretagem</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-3xl mx-auto">
+      <h1 class="text-3xl font-bold text-center mb-8 text-gray-800">
+        Processador de Notas de Corretagem
+      </h1>
+
+      <!-- Status do Backend -->
+      <div id="backendStatus" class="mb-4 p-2 rounded text-center hidden"></div>
+
+      <!-- Área de Upload -->
+      <div
+        id="dropArea"
+        class="border-4 border-dashed border-gray-300 rounded-lg p-8 mb-6 text-center bg-white"
+      >
+        <div class="space-y-4">
+          <div class="flex items-center justify-center">
+            <svg
+              class="w-16 h-16 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+          </div>
+          <p class="text-gray-600">Arraste seus arquivos PDF aqui ou</p>
+          <input
+            type="file"
+            id="fileInput"
+            multiple
+            accept=".pdf"
+            class="hidden"
+          />
+          <button
+            onclick="document.getElementById('fileInput').click()"
+            class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+          >
+            Selecione os arquivos
+          </button>
+        </div>
+      </div>
+
+      <!-- Lista de Arquivos -->
+      <div id="fileList" class="mb-6 bg-white rounded-lg p-4 hidden">
+        <h3 class="font-semibold mb-2">Arquivos Selecionados:</h3>
+        <ul id="files" class="list-disc list-inside text-gray-600"></ul>
+      </div>
+
+      <!-- Área de Resultado -->
+      <div id="resultArea" class="bg-white rounded-lg p-4 hidden">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="font-semibold">Resultado:</h3>
+          <button
+            id="copyButton"
+            class="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+          >
+            Copiar
+          </button>
+        </div>
+        <textarea
+          id="result"
+          class="w-full h-48 p-2 border rounded bg-gray-50"
+          readonly
+        ></textarea>
+      </div>
+
+      <!-- Loading -->
+      <div id="loading" class="text-center p-4 hidden">
+        <div
+          class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"
+        ></div>
+        <p class="mt-2 text-gray-600">Processando arquivos...</p>
+      </div>
+    </div>
+    <script>
+      // Definir URL do backend baseado no ambiente
+      const API_URL =
+        window.location.hostname === "localhost"
+          ? "http://localhost:5555"
+          : "https://processsador-notas-corretagem-maglancd.onrender.com"; // Você vai substituir esta URL
+
+      const API_URL = "http://localhost:5555";
+      const backendStatus = document.getElementById("backendStatus");
+      const dropArea = document.getElementById("dropArea");
+      const fileInput = document.getElementById("fileInput");
+      const fileList = document.getElementById("fileList");
+      const files = document.getElementById("files");
+      const resultArea = document.getElementById("resultArea");
+      const result = document.getElementById("result");
+      const copyButton = document.getElementById("copyButton");
+      const loading = document.getElementById("loading");
+
+      // Verificar status do backend
+      async function checkBackendStatus() {
+        try {
+          const response = await fetch(`${API_URL}/test`);
+          if (response.ok) {
+            backendStatus.textContent = "Backend conectado";
+            backendStatus.classList.add("bg-green-100", "text-green-700");
+          } else {
+            throw new Error("Backend não respondeu corretamente");
+          }
+        } catch (error) {
+          backendStatus.textContent =
+            "Backend não conectado - Verifique se o servidor está rodando";
+          backendStatus.classList.add("bg-red-100", "text-red-700");
+        }
+        backendStatus.classList.remove("hidden");
+      }
+
+      checkBackendStatus();
+
+      // Prevent default drag behaviors
+      ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
+      });
+
+      // Highlight drop zone when file is dragged over it
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropArea.addEventListener(eventName, highlight, false);
+      });
+
+      ["dragleave", "drop"].forEach((eventName) => {
+        dropArea.addEventListener(eventName, unhighlight, false);
+      });
+
+      // Handle dropped files
+      dropArea.addEventListener("drop", handleDrop, false);
+      fileInput.addEventListener("change", handleFiles, false);
+      copyButton.addEventListener("click", copyToClipboard);
+
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      function highlight(e) {
+        dropArea.classList.add("bg-gray-100");
+      }
+
+      function unhighlight(e) {
+        dropArea.classList.remove("bg-gray-100");
+      }
+
+      function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const droppedFiles = dt.files;
+        handleFiles({ target: { files: droppedFiles } });
+      }
+
+      function handleFiles(e) {
+        const selectedFiles = [...e.target.files];
+
+        // Verificar se são arquivos PDF
+        const pdfFiles = selectedFiles.filter(
+          (file) => file.type === "application/pdf"
+        );
+        if (pdfFiles.length !== selectedFiles.length) {
+          alert("Por favor, selecione apenas arquivos PDF.");
+          return;
+        }
+
+        // Mostrar lista de arquivos
+        files.innerHTML = "";
+        pdfFiles.forEach((file) => {
+          const li = document.createElement("li");
+          li.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(
+            2
+          )} MB)`;
+          files.appendChild(li);
+        });
+        fileList.classList.remove("hidden");
+
+        // Processar arquivos
+        processFiles(pdfFiles);
+      }
+
+      async function processFiles(pdfFiles) {
+        loading.classList.remove("hidden");
+        resultArea.classList.add("hidden");
+
+        const formData = new FormData();
+        pdfFiles.forEach((file) => {
+          formData.append("files", file);
+        });
+
+        try {
+          const response = await fetch(`${API_URL}/process`, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Erro no processamento");
+          }
+
+          const data = await response.json();
+          result.value = data.result;
+          resultArea.classList.remove("hidden");
+        } catch (error) {
+          console.error("Erro completo:", error);
+          alert("Erro ao processar arquivos: " + error.message);
+        } finally {
+          loading.classList.add("hidden");
+        }
+      }
+
+      function copyToClipboard() {
+        result.select();
+        document.execCommand("copy");
+        alert("Resultado copiado para a área de transferência!");
+      }
+    </script>
+  </body>
+</html>
