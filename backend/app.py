@@ -37,6 +37,10 @@ def processar_nota_corretagem(pdf_path):
     if cabecalho_match:  
         numero_nota = cabecalho_match.group(1)  # Capturar o número da nota  
         data_pregao = cabecalho_match.group(2)  # Capturar a data do pregão
+    print("cabecalho_match")
+    print(cabecalho_match)
+    print(numero_nota)
+    print(data_pregao)
 
     # Extrair as operações
     operacoes = []
