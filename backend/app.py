@@ -94,7 +94,16 @@ def processar_nota_corretagem(pdf_path):
     )
 
     total_operacoes = sum(op["valor"] for op in operacoes)
-    total_taxas = taxa_liquidacao + emolumentos
+    taxa_transferencia_ativos_match = re.search(
+        r"Taxa de Transferen(?:cia|çia) de Ativos\s+([\d.,]+)", texto
+    )
+    taxa_transferencia_ativos = (
+        float(re.sub(r"[.]", "", taxa_transferencia_ativos_match.group(1)).replace(",", "."))
+        if taxa_transferencia_ativos_match
+        else 0.0
+    )
+
+    total_taxas = taxa_liquidacao + emolumentos + taxa_transferencia_ativos
 
     taxa_acumulada = 0.0  # Para verificar a soma real
     for i, op in enumerate(operacoes):
