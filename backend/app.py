@@ -79,11 +79,19 @@ def processar_nota_corretagem(pdf_path):
     operacoes_venda = [op for op in operacoes if op["tipo"] == "V"]
 
     # Calcular as taxas proporcionais (não arredondadas ainda)
-    taxa_liquidacao_match = re.search(r"Taxa de liquidação\s+([\d,]+)", texto)
-    taxa_liquidacao = float(taxa_liquidacao_match.group(1).replace(",", ".")) if taxa_liquidacao_match else 0.0
+    taxa_liquidacao_match = re.search(r"Taxa de liquidação(?:/CCP)?\s+([\d.,]+)", texto)
+    taxa_liquidacao = (
+        float(re.sub(r"[.]", "", taxa_liquidacao_match.group(1)).replace(",", "."))
+        if taxa_liquidacao_match
+        else 0.0
+    )
 
-    emolumentos_match = re.search(r"Emolumentos\s+([\d,]+)", texto)
-    emolumentos = float(emolumentos_match.group(1).replace(",", ".")) if emolumentos_match else 0.0
+    emolumentos_match = re.search(r"Emolumentos\s+([\d.,]+)", texto)
+    emolumentos = (
+        float(re.sub(r"[.]", "", emolumentos_match.group(1)).replace(",", "."))
+        if emolumentos_match
+        else 0.0
+    )
 
     total_operacoes = sum(op["valor"] for op in operacoes)
     total_taxas = taxa_liquidacao + emolumentos
