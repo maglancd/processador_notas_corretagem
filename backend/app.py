@@ -5,6 +5,7 @@ import io
 import os
 import tempfile
 import re
+import unicodedata
 
 app = Flask(__name__)
 
@@ -20,14 +21,116 @@ CORS(app, resources={
 # Aumentar limite de upload para 16MB
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
+def remover_acentos(texto: str) -> str:
+    if texto is None:
+        return ""
+    texto_normalizado = unicodedata.normalize("NFD", texto)
+    return "".join(ch for ch in texto_normalizado if unicodedata.category(ch) != "Mn")
+
+def normalizar_texto(texto: str) -> str:
+    texto = texto or ""
+    texto = texto.replace("\xa0", " ")
+    texto = texto.replace("\r\n", "\n").replace("\r", "\n")
+    texto = re.sub(r"[ \t]+", " ", texto)
+    texto = re.sub(r"\n{3,}", "\n\n", texto)
+    return texto
+
+def extrair_texto_pdf(pdf_path: str) -> str:
+    with pdfplumber.open(pdf_path) as pdf:
+        textos_paginas = []
+        for page in pdf.pages:
+            textos_paginas.append(page.extract_text() or "")
+    return "\n".join(textos_paginas)
+
+def parse_float_br(valor_texto: str) -> float:
+    valor_texto = (valor_texto or "").strip()
+    if not valor_texto:
+        return 0.0
+    return float(re.sub(r"[.]", "", valor_texto).replace(",", "."))
+
+def formatar_float_br(valor: float) -> str:
+    return f"{valor:.2f}".replace(".", ",")
+
+def processar_nota_emprestimo(texto_pdf: str) -> str:
+    texto_normalizado = remover_acentos(normalizar_texto(texto_pdf))
+
+    data_liquidacao_match = re.search(
+        r"(?mi)^Data de Liquida[cç][aã]o.*\n(?P<data>\d{2}/\d{2}/\d{4})\s+\d+\b",
+        texto_normalizado,
+    )
+    if not data_liquidacao_match:
+        data_liquidacao_match = re.search(
+            r"(?i)Data de Liquida[cç][aã]o.*?(?P<data>\d{2}/\d{2}/\d{4})",
+            texto_normalizado,
+        )
+    if not data_liquidacao_match:
+        raise ValueError("Não foi possível identificar a Data de Liquidação na nota de empréstimo.")
+
+    data_liquidacao = data_liquidacao_match.group("data")
+
+    blocos = re.findall(
+        r"(?ms)^Lado\s+\w+\b.*?(?=^Lado\s+|^Resumo financeiro\b|\Z)",
+        texto_normalizado,
+    )
+
+    if not blocos:
+        raise ValueError("Não foi possível localizar os quadros (Lado Doador/Tomador) na nota de empréstimo.")
+
+    resultado = []
+    for bloco in blocos:
+        if not re.search(r"(?mi)^Lado\s+Doador\b", bloco):
+            continue
+
+        papel_match = re.search(r"(?i)Papel:\s*(?P<papel>[A-Z]{4}\d{1,2}F?)\b", bloco)
+        remuneracao_match = re.search(
+            r"(?i)Remunera[cç][aã]o:\s*R\$\s*(?P<valor>-?\d{1,3}(?:\.\d{3})*,\d{2})\b",
+            bloco,
+        )
+        irrf_match = re.search(
+            r"(?i)I\.?R\.?R\.?F\.?:?\s*R\$\s*(?P<valor>-?\d{1,3}(?:\.\d{3})*,\d{2})\b",
+            bloco,
+        )
+        corret_execucao_match = re.search(
+            r"(?i)Corret\.?\s*Execu[cç][aã]o:\s*R\$\s*(?P<valor>-?\d{1,3}(?:\.\d{3})*,\d{2})\b",
+            bloco,
+        )
+
+        if not (papel_match and remuneracao_match and irrf_match and corret_execucao_match):
+            continue
+
+        ticker = papel_match.group("papel").rstrip("F")
+        remuneracao = parse_float_br(remuneracao_match.group("valor"))
+        irrf = parse_float_br(irrf_match.group("valor"))
+        taxas = parse_float_br(corret_execucao_match.group("valor"))
+
+        linha = [
+            ticker,
+            data_liquidacao,
+            "BTC",
+            formatar_float_br(remuneracao),
+            formatar_float_br(irrf),
+            formatar_float_br(taxas),
+            "BRL",
+            "BTG",
+            data_liquidacao,
+        ]
+        resultado.append("\t".join(linha))
+
+    if not resultado:
+        raise ValueError("Não foi possível extrair nenhum lançamento de aluguel (lado doador).")
+
+    return "\n".join(resultado)
+
 def processar_nota_corretagem(pdf_path):
     print(pdf_path)
     # Abrir o PDF e extrair o texto
-    with pdfplumber.open(pdf_path) as pdf:
-        texto = ""
-        for page in pdf.pages:
-            texto += page.extract_text()
+    texto = extrair_texto_pdf(pdf_path)
     print(texto)
+
+    texto_normalizado = remover_acentos(normalizar_texto(texto)).upper()
+    if "NOTA DE EMPRESTIMO" in texto_normalizado:
+        return processar_nota_emprestimo(texto)
+
     # Extrair o número da nota e a data do pregão  
     numero_nota = "0000000"  
     data_pregao = "N/A"  
