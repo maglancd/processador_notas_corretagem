@@ -55,18 +55,19 @@ def processar_nota_emprestimo(texto_pdf: str) -> str:
     texto_normalizado = remover_acentos(normalizar_texto(texto_pdf))
 
     data_liquidacao_match = re.search(
-        r"(?mi)^Data de Liquida[cç][aã]o.*\n(?P<data>\d{2}/\d{2}/\d{4})\s+\d+\b",
+        r"(?mi)^Data de Liquida[cç][aã]o.*\n(?P<data>\d{2}/\d{2}/\d{4})\s+(?P<numero_nota>\d+)\b",
         texto_normalizado,
     )
     if not data_liquidacao_match:
         data_liquidacao_match = re.search(
-            r"(?i)Data de Liquida[cç][aã]o.*?(?P<data>\d{2}/\d{2}/\d{4})",
+            r"(?i)Data de Liquida[cç][aã]o.*?(?P<data>\d{2}/\d{2}/\d{4})\s+(?P<numero_nota>\d+)\b",
             texto_normalizado,
         )
     if not data_liquidacao_match:
         raise ValueError("Não foi possível identificar a Data de Liquidação na nota de empréstimo.")
 
     data_liquidacao = data_liquidacao_match.group("data")
+    numero_nota = data_liquidacao_match.group("numero_nota")
 
     blocos = re.findall(
         r"(?ms)^Lado\s+\w+\b.*?(?=^Lado\s+|^Resumo financeiro\b|\Z)",
@@ -113,6 +114,7 @@ def processar_nota_emprestimo(texto_pdf: str) -> str:
             "BRL",
             "BTG",
             data_liquidacao,
+            f"NC:{numero_nota}",
         ]
         resultado.append("\t".join(linha))
 
